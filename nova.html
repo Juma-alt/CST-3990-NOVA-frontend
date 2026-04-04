@@ -1,0 +1,2033 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Nova | Tech Universe</title>
+    <link rel="stylesheet" href="Nova.css">
+    <script src="https://cdn.jsdelivr.net/npm/vue@2.7.16/dist/vue.js"></script>
+    <script src="https://js.stripe.com/v3/"></script>
+    
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+</head>
+<body>
+<div id="app">
+
+<div v-if="showSuccessPopup" class="success-popup-overlay">
+    <div class="success-popup-box">
+        <div class="success-tick-circle">
+            <i class="fa-solid fa-check"></i>
+        </div>
+        <h2>Order Placed Successfully</h2>
+        <p>Your order has been confirmed.</p>
+    </div>
+</div>
+    <!-- Loading Overlay -->
+    <div v-if="isLoading" class="loading-overlay">
+        <div class="loader-content">
+            <h1 class="nova-loading-text">NOVA</h1>
+            <div class="novo-bar-container">
+                <div class="novo-progress"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Navbar -->
+    <nav class="navbar">
+        <div class="nav-content">
+            <div class="nav-left">
+               <a href="index.html" class="nova-logo">NOVA</a>
+
+                <div v-for="item in menuItems" :key="item.name" class="nav-item">
+                    <span class="nav-link">{{ item.name }}</span>
+
+                    <div v-if="item.dropdown" class="dropdown-menu">
+                        <a
+                            v-for="subItem in item.dropdown"
+                            :key="subItem"
+                            href="#"
+                            class="dropdown-link"
+                            @click.prevent="goToProduct(subItem)"
+                        >
+                            {{ subItem }}
+                        </a>
+                    </div>
+                </div>
+            </div>
+
+           <div
+    v-if="cart.length > 0"
+    class="cart-icon-wrapper"
+    @click="goToCheckout"
+    :class="{ 'cart-bounce': cartAnimate }"
+>
+    <i class="fa-solid fa-bag-shopping"></i>
+    <span class="cart-badge">{{ cart.length }}</span>
+</div>
+    </nav>
+
+    <div class="cart-toast" v-if="showCartToast">
+        {{ cartToastMessage }}
+    </div>
+
+    <!-- Home -->
+<div v-if="currentView === 'home'">
+    <!-- Hero Products -->
+    <section
+        v-for="p in heroProducts"
+        :key="p.name"
+        class="hero-section"
+        :style="{ backgroundImage: 'url(' + p.img + ')' }"
+    >
+        <div class="hero-content">
+            <h2 :style="{ color: p.color }">{{ p.name }}</h2>
+            <p>{{ p.tag }}</p>
+            <button class="buy-btn" @click="goToProduct(p.name)">Buy</button>
+        </div>
+    </section>
+
+    <!-- All Products -->
+    <section class="all-products-section">
+        <div class="all-products-header">
+            <h2>Nova Products</h2>
+            <p>Browse the full Nova collection.</p>
+        </div>
+
+        <div class="products-grid">
+            <div
+                v-for="product in allProducts"
+                :key="product._id"
+                class="product-card"
+                @click="goToProduct(product.name)"
+            >
+                <img
+                    v-if="product.colors && product.colors.length"
+                    :src="product.colors[0].image"
+                    :alt="product.name"
+                    class="product-card-img"
+                >
+
+                <h3>{{ product.name }}</h3>
+                <p class="product-card-desc">{{ product.longDescription }}</p>
+                <div class="product-card-price">
+                    From {{ Number(product.basePrice).toLocaleString() }} AED
+                </div>
+
+                <button class="buy-btn">View Product</button>
+            </div>
+        </div>
+    </section>
+</div>
+
+    <!-- Product Details -->
+  <div v-if="currentView === 'details'" class="details-page" :style="{ backgroundColor: selectedProduct.bgColor, color: selectedProduct.textColor }">
+   <button class="back-btn" @click="goBackHome">← Back to Nova Home</button>
+        <div class="config-wrapper">
+
+            <div class="sticky-image-container">
+                <div class="zoom-wrapper">
+                    <img :src="activeColor.image" class="details-img" alt="Product image">
+                </div>
+
+                <div v-if="selectedProduct.gallery" class="gallery-container">
+                    <div v-for="(img, index) in selectedProduct.gallery" :key="index" class="gallery-card">
+                        <img :src="img" alt="Gallery image">
+                    </div>
+                </div>
+
+                <div class="specs-grid">
+                    <div class="spec-card" v-for="spec in selectedProduct.specs" :key="spec.label">
+                        <h4>{{ spec.label }}</h4>
+                        <p class="spec-item-text" v-html="spec.value"></p>
+                    </div>
+                </div>
+            </div>
+
+            <div class="config-options">
+                <p v-if="selectedProduct.isNew" class="product-badge-new">NEW</p>
+
+                <h1 class="product-title">Buy {{ selectedProduct.name }}</h1>
+                <p class="product-description">{{ selectedProduct.longDescription }}</p>
+
+                <hr class="section-divider">
+
+                <!-- Model -->
+                <div v-if="selectedProduct.models" class="option-section">
+                    <h3 class="option-title">
+                        Model. <span>Which is right for you?</span>
+                    </h3>
+
+                    <div class="selection-group">
+                        <div
+                            v-for="m in selectedProduct.models"
+                            :key="m.name"
+                            class="model-box"
+                            :class="{ 'active-highlight': activeModel && activeModel.name === m.name }"
+                            @click="changeModel(m)"
+                        >
+                            <div class="tile-content">
+                                <span class="tile-name">{{ m.name }}</span>
+                                <span v-if="m.description" class="tile-subtext">{{ m.description }}</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Connectivity -->
+                <div v-if="activeModel && activeModel.connectivityOptions" class="option-section">
+                    <h3 class="option-title">
+                        Connectivity. <span>Choose your connection type</span>
+                    </h3>
+
+                    <div class="selection-group">
+                        <div
+                            v-for="c in activeModel.connectivityOptions"
+                            :key="c.name"
+                            class="selection-tile"
+                            :class="{ active: activeConnectivity && activeConnectivity.name === c.name }"
+                            @click="activeConnectivity = c"
+                        >
+                            <div class="tile-content">
+                                <span class="tile-name">{{ c.name }}</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Size -->
+                <div v-if="selectedProduct.sizes" class="option-section">
+                    <h3 class="option-title">
+                        Size. <span>Choose your case size</span>
+                    </h3>
+
+                    <div class="selection-group">
+                        <div
+                            v-for="size in selectedProduct.sizes"
+                            :key="size.name"
+                            class="selection-tile"
+                            :class="{ active: activeSize && activeSize.name === size.name }"
+                            @click="activeSize = size"
+                        >
+                            <span class="tile-name">{{ size.name }}</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Finish -->
+                <div class="option-section">
+                    <h3 class="option-title">
+                        Finish. <span>{{ activeColor.name }}</span>
+                    </h3>
+
+                    <div class="color-dot-group">
+                        <div
+                            v-for="color in availableColors"
+                            :key="color.name"
+                            class="color-dot"
+                            :style="{ backgroundColor: color.hex }"
+                            :class="{ active: activeColor.name === color.name }"
+                            @click="activeColor = color"
+                        ></div>
+                    </div>
+                </div>
+
+                <!-- Storage -->
+                <div v-if="selectedProduct.storageOptions" class="option-section">
+                    <h3 class="option-title">
+                        Storage. <span>How much space do you need?</span>
+                    </h3>
+
+                    <div class="selection-group">
+                        <div
+                            v-for="s in selectedProduct.storageOptions"
+                            :key="s.name"
+                            class="selection-tile"
+                            :class="{ active: activeStorage && activeStorage.name === s.name }"
+                            @click="activeStorage = s"
+                        >
+                            <span class="tile-name">{{ s.name }}</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Display -->
+                <div v-if="selectedProduct.displayOptions" class="option-section">
+                    <h3 class="option-title">Display.</h3>
+
+                    <div class="selection-group">
+                        <div
+                            v-for="d in selectedProduct.displayOptions"
+                            :key="d.name"
+                            class="selection-tile"
+                            :class="{ active: activeDisplay && activeDisplay.name === d.name }"
+                            @click="activeDisplay = d"
+                        >
+                            <span class="tile-name">{{ d.name }}</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Chip -->
+                <div v-if="availableChips.length" class="option-section">
+                    <h3 class="option-title">Chip.</h3>
+
+                    <div class="selection-group">
+                        <div
+                            v-for="chip in availableChips"
+                            :key="chip.name"
+                            class="selection-tile"
+                            :class="{ active: activeChip && activeChip.name === chip.name }"
+                            @click="activeChip = chip; activeVariant = chip.variants[0]"
+                        >
+                            <span class="tile-name">{{ chip.name }}</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Configuration -->
+                <div v-if="activeChip && activeChip.variants" class="option-section">
+                    <h3 class="option-title">Configuration.</h3>
+
+                    <div class="selection-group">
+                        <div
+                            v-for="v in activeChip.variants"
+                            :key="v.name"
+                            class="selection-tile"
+                            :class="{ active: activeVariant && activeVariant.name === v.name }"
+                            @click="activeVariant = v"
+                        >
+                            <span class="tile-name">{{ v.name }}</span>
+                        </div>
+                    </div>
+                </div>
+
+             <!-- Configuration -->
+<div v-if="activeChip && activeChip.variants" class="option-section">
+    <h3 class="option-title">Configuration.</h3>
+
+    <div class="selection-group">
+        <div
+            v-for="v in activeChip.variants"
+            :key="v.name"
+            class="selection-tile"
+            :class="{ active: activeVariant && activeVariant.name === v.name }"
+            @click="activeVariant = v"
+        >
+            <span class="tile-name">{{ v.name }}</span>
+        </div>
+    </div>
+</div>
+
+<p class="stock-status" :class="{ 'out-stock': currentStock === 0 && !isSelectionIncomplete }">
+    {{
+        isSelectionIncomplete
+            ? selectionMessage
+            : currentStock > 0
+                ? `Stock Available: ${currentStock}`
+                : 'Out Of Stock'
+    }}
+</p>
+
+<div class="price-tag">{{ calculatePrice }} AED</div>
+
+<button
+    class="buy-btn"
+    @click="addToCart"
+    :disabled="isSelectionIncomplete || currentStock === 0"
+>
+    {{
+        isSelectionIncomplete
+            ? 'Select Options'
+            : currentStock === 0
+                ? 'Out Of Stock'
+                : 'Add to Bag'
+    }}
+</button>
+
+<p @click="currentView = 'home'" class="explore-link">Return to Home</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- Checkout -->
+    <div v-if="currentView === 'checkout'" class="checkout-page">
+        <div class="checkout-container">
+
+            <div class="checkout-form-section">
+                <button class="back-btn" @click="currentView = prevView">← Back</button>
+
+                <h2 class="checkout-title">Checkout</h2>
+                <p class="checkout-subtitle">Complete your order details below.</p>
+
+                <div class="checkout-form">
+                    <div class="form-group">
+                        <input type="text" v-model="checkoutForm.name" placeholder="Full Name">
+                        <span class="error-text" v-if="checkoutErrors.name">{{ checkoutErrors.name }}</span>
+                    </div>
+
+                    <div class="form-group">
+                        <input type="email" v-model="checkoutForm.email" placeholder="Email ID">
+                        <span class="error-text" v-if="checkoutErrors.email">{{ checkoutErrors.email }}</span>
+                    </div>
+
+                    <div class="form-group">
+                        <input type="text" v-model="checkoutForm.contact" placeholder="Contact No">
+                        <span class="error-text" v-if="checkoutErrors.contact">{{ checkoutErrors.contact }}</span>
+                    </div>
+
+                    <div class="form-group">
+                        <label class="section-mini-label">Address Label</label>
+                        <div class="address-label-group">
+                            <button type="button" class="address-label-btn" :class="{ active: checkoutForm.addressLabel === 'Work' }" @click="checkoutForm.addressLabel = 'Work'">Work</button>
+                            <button type="button" class="address-label-btn" :class="{ active: checkoutForm.addressLabel === 'Home' }" @click="checkoutForm.addressLabel = 'Home'">Home</button>
+                            <button type="button" class="address-label-btn" :class="{ active: checkoutForm.addressLabel === 'Other' }" @click="checkoutForm.addressLabel = 'Other'">Other</button>
+                        </div>
+                        <span class="error-text" v-if="checkoutErrors.addressLabel">{{ checkoutErrors.addressLabel }}</span>
+                    </div>
+
+                    <div class="form-group">
+                        <input type="text" v-model="checkoutForm.address" placeholder="Address">
+                        <span class="error-text" v-if="checkoutErrors.address">{{ checkoutErrors.address }}</span>
+                    </div>
+
+                    <div class="form-group">
+                        <input type="text" v-model="checkoutForm.floorRoom" placeholder="Floor / Room No">
+                        <span class="error-text" v-if="checkoutErrors.floorRoom">{{ checkoutErrors.floorRoom }}</span>
+                    </div>
+
+                    <div class="form-group">
+                        <input type="text" v-model="checkoutForm.landmark" placeholder="Landmark">
+                        <span class="error-text" v-if="checkoutErrors.landmark">{{ checkoutErrors.landmark }}</span>
+                    </div>
+
+                    <div class="payment-section-title">Payment Details</div>
+
+                    <div class="form-group">
+                        <input type="text" v-model="checkoutForm.cardName" placeholder="Card Name">
+                        <span class="error-text" v-if="checkoutErrors.cardName">{{ checkoutErrors.cardName }}</span>
+                    </div>
+
+                    <div class="form-group">
+                        <input type="text" v-model="checkoutForm.cardNumber" placeholder="Card Number" maxlength="19" inputmode="numeric" @input="formatCardNumber">
+                        <span class="error-text" v-if="checkoutErrors.cardNumber">{{ checkoutErrors.cardNumber }}</span>
+                    </div>
+
+                    <div class="card-row">
+                        <div class="form-group">
+                            <input type="text" v-model="checkoutForm.expiryDate" placeholder="MM/YY" maxlength="5" inputmode="numeric" @input="formatExpiryDate">
+                            <span class="error-text" v-if="checkoutErrors.expiryDate">{{ checkoutErrors.expiryDate }}</span>
+                        </div>
+
+                        <div class="form-group">
+                            <input type="password" v-model="checkoutForm.cvc" placeholder="CVC" maxlength="3" inputmode="numeric" @input="formatCVC">
+                            <span class="error-text" v-if="checkoutErrors.cvc">{{ checkoutErrors.cvc }}</span>
+                        </div>
+                    </div>
+
+                    <button class="place-order-btn" @click="placeOrder">Place Order</button>
+                    <p @click="currentView = 'home'" class="return-home-link">Return to Home</p>
+                </div>
+            </div>
+
+            <div class="checkout-summary-section">
+                <h3 class="summary-title">Your Bag</h3>
+
+                <div v-if="cart.length === 0" class="empty-cart">
+                    Your bag is empty.
+                </div>
+
+                <div v-else>
+                    <div v-for="(item,index) in cart" :key="index" class="checkout-item">
+                        <div class="checkout-item-left">
+                            <img :src="item.image" alt="Product Image" class="checkout-item-img">
+                        </div>
+
+                        <div class="checkout-item-center">
+                            <h4>{{ item.name }}</h4>
+                            <p v-if="item.model">Model: {{ item.model }}</p>
+                            <p v-if="item.connectivity">Connectivity: {{ item.connectivity }}</p>
+                            <p v-if="item.color">Color: {{ item.color }}</p>
+                            <p v-if="item.storage">Storage: {{ item.storage }}</p>
+                            <p v-if="item.chip">Chip: {{ item.chip }}</p>
+                            <p v-if="item.variant">Configuration: {{ item.variant }}</p>
+                            <p v-if="item.size">Size: {{ item.size }}</p>
+                        </div>
+
+                        <div class="checkout-item-right">
+                            <div class="checkout-price">{{ item.price }} AED</div>
+                            <button class="remove-btn" @click.stop="removeFromCart(index)">Remove</button>
+                        </div>
+                    </div>
+
+                    <div class="summary-box">
+                        <div class="summary-row">
+                            <span>Subtotal</span>
+                            <span>{{ totalPrice }} AED</span>
+                        </div>
+
+                        <div class="summary-row">
+                            <span>Delivery</span>
+                            <span>{{ pickupFromStore ? 'Store Pickup' : 'Free' }}</span>
+                        </div>
+
+                        <div class="summary-row total-row">
+                            <span>Total</span>
+                            <span>{{ totalPrice }} AED</span>
+                        </div>
+
+                        <div class="pickup-section">
+                            <div class="pickup-toggle-row">
+                                <span class="pickup-label">Pickup From Store</span>
+
+                                <label class="switch">
+                                    <input type="checkbox" v-model="pickupFromStore">
+                                    <span class="slider"></span>
+                                </label>
+                            </div>
+
+                            <div v-if="pickupFromStore" class="pickup-dropdown-wrap">
+                                <select v-model="selectedStore" class="store-dropdown">
+                                    <option disabled value="">Select pickup location</option>
+                                    <option>Nova Uptown Mirdif</option>
+                                    <option>Nova Mall of The Emirates</option>
+                                    <option>Nova Al Wahda Mall</option>
+                                </select>
+                            </div>
+
+                            <div v-else class="delivery-estimate">
+                                Estimated Delivery: <strong>{{ estimatedDeliveryDate }}</strong>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+        </div>
+    </div>
+
+    <!-- Receipt -->
+    <div v-if="currentView === 'receipt'" class="receipt-page">
+    <div class="bill-receipt">
+        <div class="bill-header">
+            <div>
+                <h1>NOVA</h1>
+                <p>Premium Tech Retail</p>
+            </div>
+            <div class="bill-status">PAID</div>
+        </div>
+
+        <div class="bill-meta-grid">
+    <div>
+        <span>Order No</span>
+        <strong>{{ receiptData.orderNumber }}</strong>
+    </div>
+
+    <div>
+        <span>Date</span>
+        <strong>{{ receiptData.purchaseDate }}</strong>
+    </div>
+
+    <div>
+        <span>Time</span>
+        <strong>{{ receiptData.purchaseTime }}</strong>
+    </div>
+
+    <div>
+        <span>Customer</span>
+        <strong>{{ receiptData.name }}</strong>
+    </div>
+
+    <div>
+        <span>Contact</span>
+        <strong>{{ receiptData.contact }}</strong>
+    </div>
+</div>
+
+        <div class="bill-section">
+            <h3>Billing Details</h3>
+            <p><strong>Email:</strong> {{ receiptData.email }}</p>
+            <p><strong>Address Type:</strong> {{ receiptData.addressLabel }}</p>
+            <p><strong>Address:</strong> {{ receiptData.address }}</p>
+            <p><strong>Floor / Room:</strong> {{ receiptData.floorRoom }}</p>
+            <p><strong>Landmark:</strong> {{ receiptData.landmark }}</p>
+        </div>
+
+        <div class="bill-section">
+            <h3>Order Type</h3>
+            <p>
+                <strong>{{ receiptData.pickupFromStore ? 'Pickup from Store' : 'Home Delivery' }}</strong>
+            </p>
+            <p v-if="receiptData.pickupFromStore && receiptData.selectedStore">
+                <strong>Pickup Location:</strong> {{ receiptData.selectedStore }}
+            </p>
+            <p v-else>
+                <strong>Estimated Delivery:</strong> {{ receiptData.estimatedDeliveryDate }}
+            </p>
+        </div>
+
+        <div class="bill-section">
+            <h3>Items</h3>
+            <table class="bill-table">
+                <thead>
+                    <tr>
+                        <th>Item</th>
+                        <th>Config</th>
+                        <th>Price</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr v-for="(item, index) in receiptData.items" :key="index">
+                        <td>{{ item.name }}</td>
+                        <td>
+                            <div class="bill-config">
+                                <span v-if="item.model">{{ item.model }}</span>
+                                <span v-if="item.storage">{{ item.storage }}</span>
+                                <span v-if="item.color">{{ item.color }}</span>
+                                <span v-if="item.connectivity">{{ item.connectivity }}</span>
+                                <span v-if="item.size">{{ item.size }}</span>
+                                <span v-if="item.chip">{{ item.chip }}</span>
+                                <span v-if="item.variant">{{ item.variant }}</span>
+                            </div>
+                        </td>
+                        <td>{{ item.price }} AED</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+
+        <div class="bill-total-row">
+            <span>Total Paid</span>
+            <strong>{{ receiptData.totalPrice }} AED</strong>
+        </div>
+
+        <div class="bill-footer">
+            <p>Thank you for shopping with NOVA.</p>
+            <button class="bill-home-btn" @click="currentView = 'home'">Back to Home</button>
+        </div>
+    </div>
+</div>
+
+    <!-- Nova AI -->
+    <div class="nova-ai-trigger" @click="showAI = !showAI">
+        <i class="fa-solid fa-sparkles" v-if="!showAI"></i>
+        <i class="fa-solid fa-xmark" v-else></i>
+    </div>
+
+    <div class="nova-ai-window" v-if="showAI">
+        <div class="nova-ai-header">
+            <h3>NOVA SPECIALIST</h3>
+            <span class="status-dot"></span>
+        </div>
+
+        <div class="nova-ai-messages" id="ai-messages">
+            <div v-for="m in aiMessages" :key="m.text + m.role" :class="['msg', m.role]">
+                <span v-html="m.text"></span>
+            </div>
+        </div>
+
+        <div class="nova-ai-input-area">
+            <input v-model="userQuery" @keyup.enter="askNova" placeholder="Ask Nova about cameras or gaming...">
+            <button @click="askNova"><i class="fa-solid fa-paper-plane"></i></button>
+        </div>
+    </div>
+</div>
+
+<script>
+new Vue({
+    el: '#app',
+    data: {
+        isLoading: false,
+        currentView: 'home',
+        selectedProduct: null,
+        activeColor: null,
+        activeSize: null,
+        activeStorage: null,
+        activeModel: null,
+        activeDisplay: null,
+        showSuccessPopup: false,
+        activeChip: null,
+        activeVariant: null,
+        pickupFromStore: false,
+        selectedStore: '',
+        cartToastMessage: '',
+        cartAnimate: false,
+showCartToast: false,
+        activeConnectivity: null,
+        receiptData: null,
+        orderCounter: Number(localStorage.getItem("novaOrderCounter")) || 1,
+        cart: [],
+        showAI: false,
+        prevView: 'home',
+        userQuery: '',
+
+        checkoutForm: {
+            name: '',
+            email: '',
+            contact: '',
+            addressLabel: '',
+            address: '',
+            floorRoom: '',
+            landmark: '',
+            cardName: '',
+            cardNumber: '',
+            expiryDate: '',
+            cvc: ''
+        },
+
+        checkoutErrors: {},
+
+        aiMessages: [
+            { role: 'ai', text: 'Hello! I am <b>Nova AI</b>. How can i help you?' }
+        ],
+    
+          heroProducts: [
+    { name: 'iPhone 17 Pro', tag: 'Titanium. Pro Intelligence.', img: 'pics/iphone17.png', color: '#00f2ff' },
+    { name: 'Galaxy S26 Ultra', tag: 'Everyday Samsung power with style.', img: 'pics/galaxys26-ultra.jpg', color: '#8ab4ff' },
+    { name: 'MacBook Pro', tag: 'Mind-blowing. Head-turning.', img: 'pics/mac.png', color: '#fff' },
+    { name: 'Airpods', tag: 'Magic like you’ve never heard.', img: 'pics/airpods.png', color: '#9de5ff' },
+    { name: 'iPad Air', tag: 'Two sizes. Faster chip. All magic.', img: 'pics/ipadair.png', color: '#9de5ff' },
+
+    
+    { name: 'Galaxy X', tag: 'Next-generation flagship performance.', img: 'pics/galaxyx-black.png', color: '#c7d2ff' },
+    { name: 'Galaxy Z', tag: 'Foldable innovation. Premium experience.', img: 'pics/galaxyz-black.png', color: '#dfe8ff' }
+],
+       menuItems: [
+    {
+        name: 'iPhone',
+        dropdown: [
+            'iPhone 17 Pro Max',
+            'iPhone 17 Pro',
+            'iPhone 17',
+            'iPhone Air',
+            'iPhone 16 Pro Max',
+            'iPhone 16 Pro',
+            'iPhone 16',
+            'iPhone 15 Pro Max',
+            'iPhone 15 Pro'
+        ]
+    },
+  { 
+    name: 'Galaxy S',
+    dropdown: [
+      'Galaxy S25',
+      'Galaxy S25 Ultra',
+      'Galaxy S26',
+      'Galaxy S26 Ultra'
+    ]
+  },
+  { 
+    name: 'Galaxy Z',
+    dropdown: [
+      'Galaxy Z Flip7',
+      'Galaxy Z Flip7 FE',
+      'Galaxy Z Flip6',
+      'Galaxy Z Fold7',
+      'Galaxy Z Fold6'
+    ]
+  },
+  { 
+    name: 'Galaxy A',
+    dropdown: [
+      'Galaxy A55 5G',
+      'Galaxy A35 5G',
+      'Galaxy A25 5G',
+      'Galaxy A15 5G',
+      'Galaxy A05s'
+    ]
+  },
+  { name: 'Mac', dropdown: ['MacBook Pro', 'MacBook Air'] },
+  { name: 'iPad', dropdown: ['iPad Pro', 'iPad Air'] },
+  { name: 'Watch', dropdown: ['Watch Series 11', 'Watch SE 3'] },
+  { 
+    name: 'Galaxy Watch',
+    dropdown: [
+      'Galaxy Watch Ultra',
+      'Galaxy Watch',
+      'Galaxy Watch Classic'
+    ]
+  },
+  { name: 'Airpods', dropdown: ['Airpods Pro 3', 'Airpods 4', 'Airpods Max'] },
+  { name: 'Galaxy Buds', dropdown: ['Galaxy Buds 3', 'Galaxy Buds 2'] }
+
+],
+
+
+        allProducts: []
+            
+    },
+    async created() {
+    try {
+        const response = await fetch("http://localhost:3000/api/products");
+        const products = await response.json();
+        this.allProducts = products;
+
+        console.log("Loaded products:", this.allProducts.map(p => p.name));
+    } catch (error) {
+        console.error("Failed to load products:", error);
+    }
+
+    const savedCart = localStorage.getItem(this.cartStorageKey);
+    this.cart = savedCart ? JSON.parse(savedCart) : [];
+},
+    
+    computed: {
+    calculatePrice() {
+        if (!this.selectedProduct) return "0";
+
+        let p = this.selectedProduct.basePrice || 0;
+
+        if (this.activeModel) {
+            p += this.activeModel.priceMod || this.activeModel.basePrice || this.activeModel.price || 0;
+        }
+
+        if (this.activeConnectivity) {
+            p += this.activeConnectivity.priceMod || this.activeConnectivity.basePrice || this.activeConnectivity.price || 0;
+        }
+
+        if (this.activeSize) {
+            p += this.activeSize.priceMod || this.activeSize.basePrice || this.activeSize.price || 0;
+        }
+
+        if (this.activeDisplay) {
+            p += this.activeDisplay.priceMod || this.activeDisplay.price || 0;
+        }
+
+        if (this.activeChip) {
+            p += this.activeChip.priceMod || this.activeChip.price || 0;
+        }
+
+        if (this.activeVariant) {
+            p += this.activeVariant.priceMod || this.activeVariant.price || 0;
+        }
+
+        if (this.activeStorage) {
+            p += this.activeStorage.priceMod || this.activeStorage.price || 0;
+        }
+
+        return p.toLocaleString();
+    },
+
+    currentStock() {
+   if (!this.selectedProduct || !this.selectedProduct.inventory) return 0;
+
+    const hasStorage = this.selectedProduct.storageOptions && this.selectedProduct.storageOptions.length;
+    const hasModel = this.selectedProduct.models && this.selectedProduct.models.length;
+
+    let match = null;
+
+    if (hasStorage) {
+        if (!this.activeColor || !this.activeColor.name || !this.activeStorage) return 0;
+
+        match = this.selectedProduct.inventory.find(item =>
+            item.color === this.activeColor.name &&
+            item.storage === this.activeStorage.name
+        );
+    } else if (hasModel) {
+        if (!this.activeColor || !this.activeColor.name || !this.activeModel) return 0;
+
+        match = this.selectedProduct.inventory.find(item =>
+            item.color === this.activeColor.name &&
+            item.model === this.activeModel.name
+        );
+    } else {
+        if (!this.activeColor || !this.activeColor.name) return 0;
+
+        match = this.selectedProduct.inventory.find(item =>
+            item.color === this.activeColor.name
+        );
+    }
+
+    return match ? match.stock : 0;
+},
+    availableChips() {
+        if (!this.selectedProduct || !this.selectedProduct.chips) return [];
+        if (!this.activeModel) return this.selectedProduct.chips;
+
+        return this.selectedProduct.chips.filter(chip => {
+            return !chip.allowedModels || chip.allowedModels.includes(this.activeModel.name);
+        });
+    },
+
+   availableColors() {
+    if (!this.selectedProduct) return [];
+
+    if (
+        this.activeModel &&
+        this.activeModel.colors &&
+        this.activeModel.colors.length
+    ) {
+        return this.activeModel.colors;
+    }
+
+    return this.selectedProduct.colors && this.selectedProduct.colors.length
+        ? this.selectedProduct.colors
+        : [];
+},
+
+    totalPrice() {
+        return this.cart
+            .reduce((sum, item) => {
+                const priceCleaned = Number(String(item.price).replace(/,/g, ''));
+                return sum + (isNaN(priceCleaned) ? 0 : priceCleaned);
+            }, 0)
+            .toLocaleString();
+    },
+
+    estimatedDeliveryDate() {
+        const today = new Date();
+        const deliveryDate = new Date(today);
+        deliveryDate.setDate(today.getDate() + 4);
+
+        const day = deliveryDate.getDate();
+        const month = deliveryDate.toLocaleString('en-US', { month: 'long' });
+
+        function ordinal(n) {
+            if (n > 3 && n < 21) return 'th';
+            switch (n % 10) {
+                case 1: return 'st';
+                case 2: return 'nd';
+                case 3: return 'rd';
+                default: return 'th';
+            }
+        }
+
+        return `${day}${ordinal(day)} ${month}`;
+    },
+
+    currentUser() {
+        const session = localStorage.getItem("nova_session");
+        return session ? JSON.parse(session) : null;
+    },
+
+    cartStorageKey() {
+        return this.currentUser
+            ? `nova_cart_${this.currentUser.email}`
+            : "nova_cart_guest";
+    },
+    optionLabel() {
+    if (!this.selectedProduct) return 'option';
+
+    if (this.selectedProduct.storageOptions && this.selectedProduct.storageOptions.length) {
+        return 'storage';
+    }
+
+    if (this.selectedProduct.sizes && this.selectedProduct.sizes.length) {
+        return 'size';
+    }
+
+    if (this.selectedProduct.chips && this.selectedProduct.chips.length) {
+        return 'chip';
+    }
+
+    return '';
+},
+
+needsSecondOption() {
+    if (!this.selectedProduct) return false;
+
+    return (
+        (this.selectedProduct.storageOptions && this.selectedProduct.storageOptions.length) ||
+        (this.selectedProduct.sizes && this.selectedProduct.sizes.length) ||
+        (this.selectedProduct.chips && this.selectedProduct.chips.length)
+    );
+},
+selectionLabel() {
+    if (!this.selectedProduct) return 'option';
+
+    if (this.selectedProduct.storageOptions && this.selectedProduct.storageOptions.length) {
+        return 'storage';
+    }
+
+    if (this.selectedProduct.models && this.selectedProduct.models.length) {
+        return 'model';
+    }
+
+    return '';
+},
+
+selectionMessage() {
+    if (!this.selectedProduct) return 'Select options';
+
+    const hasColor = this.selectedProduct.colors && this.selectedProduct.colors.length;
+    const hasStorage = this.selectedProduct.storageOptions && this.selectedProduct.storageOptions.length;
+    const hasModel = this.selectedProduct.models && this.selectedProduct.models.length;
+
+    if (hasColor && hasStorage) return 'Select color and storage';
+    if (hasColor && hasModel) return 'Select color and model';
+    if (hasColor) return 'Select color';
+
+    return 'Select options';
+},
+
+isSelectionIncomplete() {
+    if (!this.selectedProduct) return true;
+
+    const hasColor = this.selectedProduct.colors && this.selectedProduct.colors.length;
+    const hasStorage = this.selectedProduct.storageOptions && this.selectedProduct.storageOptions.length;
+    const hasModel = this.selectedProduct.models && this.selectedProduct.models.length;
+
+    if (hasStorage) {
+        return !this.activeColor || !this.activeColor.name || !this.activeStorage;
+    }
+
+    if (hasModel) {
+        return !this.activeColor || !this.activeColor.name || !this.activeModel;
+    }
+
+    if (hasColor) {
+        return !this.activeColor || !this.activeColor.name;
+    }
+
+    return false;
+},
+    },
+
+  
+methods: {
+    askNova() {
+        if (!this.userQuery.trim()) return;
+
+        const q = this.userQuery.toLowerCase().trim();
+
+        this.aiMessages.push({ role: "user", text: this.userQuery });
+        this.userQuery = "";
+
+        const estimateAvailableStorage = (storage) => {
+            const map = {
+                "128GB": "111GB usable approx",
+                "256GB": "235GB usable approx",
+                "512GB": "472GB usable approx",
+                "1TB": "930GB usable approx",
+                "2TB": "1.86TB usable approx",
+                "4TB": "3.72TB usable approx",
+                "8TB": "7.44TB usable approx"
+            };
+            return map[storage] || "Varies after system setup";
+        };
+
+        const formatStorageList = (storages) => {
+            return storages.map(s => `${s.size} (${s.available}) - ${s.price}`).join("<br>");
+        };
+
+        const getBestStorageMatch = (storages, wantedStorage) => {
+            if (!wantedStorage) return storages[0];
+            return storages.find(s => wantedStorage.includes(s.size.toLowerCase())) || storages[0];
+        };
+
+        const devices = {
+            iphone: {
+                "iphone 17 pro max": {
+                    brand: "Apple",
+                    category: "Phone",
+                    chip: "A19 Pro",
+                    battery: "39 hours",
+                    camera: 9.8,
+                    gaming: 9.7,
+                    speed: 9.7,
+                    display: "6.9-inch Super Retina XDR",
+                    storages: [
+                        { size: "256GB", price: "$1199", available: estimateAvailableStorage("256GB") },
+                        { size: "512GB", price: "$1399", available: estimateAvailableStorage("512GB") },
+                        { size: "1TB", price: "$1599", available: estimateAvailableStorage("1TB") }
+                    ]
+                },
+                "iphone 17 pro": {
+                    brand: "Apple",
+                    category: "Phone",
+                    chip: "A19 Pro",
+                    battery: "34 hours",
+                    camera: 9.6,
+                    gaming: 9.6,
+                    speed: 9.6,
+                    display: "6.3-inch Super Retina XDR",
+                    storages: [
+                        { size: "128GB", price: "$1099", available: estimateAvailableStorage("128GB") },
+                        { size: "256GB", price: "$1199", available: estimateAvailableStorage("256GB") },
+                        { size: "512GB", price: "$1399", available: estimateAvailableStorage("512GB") },
+                        { size: "1TB", price: "$1599", available: estimateAvailableStorage("1TB") }
+                    ]
+                },
+                "iphone 17": {
+                    brand: "Apple",
+                    category: "Phone",
+                    chip: "A19",
+                    battery: "30 hours",
+                    camera: 9.2,
+                    gaming: 9.3,
+                    speed: 9.3,
+                    display: "6.1-inch Super Retina XDR",
+                    storages: [
+                        { size: "128GB", price: "$899", available: estimateAvailableStorage("128GB") },
+                        { size: "256GB", price: "$999", available: estimateAvailableStorage("256GB") },
+                        { size: "512GB", price: "$1199", available: estimateAvailableStorage("512GB") }
+                    ]
+                },
+                "iphone air": {
+                    brand: "Apple",
+                    category: "Phone",
+                    chip: "A19",
+                    battery: "28 hours",
+                    camera: 9.0,
+                    gaming: 9.0,
+                    speed: 9.0,
+                    display: "6.6-inch Super Retina XDR",
+                    storages: [
+                        { size: "128GB", price: "$799", available: estimateAvailableStorage("128GB") },
+                        { size: "256GB", price: "$899", available: estimateAvailableStorage("256GB") },
+                        { size: "512GB", price: "$1099", available: estimateAvailableStorage("512GB") }
+                    ]
+                },
+                "iphone 16 pro max": {
+                    brand: "Apple",
+                    category: "Phone",
+                    chip: "A18 Pro",
+                    battery: "33 hours",
+                    camera: 9.6,
+                    gaming: 9.5,
+                    speed: 9.5,
+                    display: "6.9-inch Super Retina XDR",
+                    storages: [
+                        { size: "256GB", price: "$1099", available: estimateAvailableStorage("256GB") },
+                        { size: "512GB", price: "$1299", available: estimateAvailableStorage("512GB") },
+                        { size: "1TB", price: "$1499", available: estimateAvailableStorage("1TB") }
+                    ]
+                },
+                "iphone 16 pro": {
+                    brand: "Apple",
+                    category: "Phone",
+                    chip: "A18 Pro",
+                    battery: "29 hours",
+                    camera: 9.5,
+                    gaming: 9.4,
+                    speed: 9.4,
+                    display: "6.3-inch Super Retina XDR",
+                    storages: [
+                        { size: "128GB", price: "$999", available: estimateAvailableStorage("128GB") },
+                        { size: "256GB", price: "$1099", available: estimateAvailableStorage("256GB") },
+                        { size: "512GB", price: "$1299", available: estimateAvailableStorage("512GB") },
+                        { size: "1TB", price: "$1499", available: estimateAvailableStorage("1TB") }
+                    ]
+                    
+                },
+                "iphone 16 plus": {
+                    brand: "Apple",
+                    category: "Phone",
+                    chip: "A18",
+                    battery: "31 hours",
+                    camera: 9.1,
+                    gaming: 9.1,
+                    speed: 9.1,
+                    display: "6.7-inch Super Retina XDR",
+                    storages: [
+                        { size: "128GB", price: "$899", available: estimateAvailableStorage("128GB") },
+                        { size: "256GB", price: "$999", available: estimateAvailableStorage("256GB") },
+                        { size: "512GB", price: "$1199", available: estimateAvailableStorage("512GB") }
+                    ]
+                },
+                "iphone 16": {
+                    brand: "Apple",
+                    category: "Phone",
+                    chip: "A18",
+                    battery: "27 hours",
+                    camera: 9.1,
+                    gaming: 9.1,
+                    speed: 9.1,
+                    display: "6.1-inch Super Retina XDR",
+                    storages: [
+                        { size: "128GB", price: "$799", available: estimateAvailableStorage("128GB") },
+                        { size: "256GB", price: "$899", available: estimateAvailableStorage("256GB") },
+                        { size: "512GB", price: "$1099", available: estimateAvailableStorage("512GB") }
+                    ]
+                },
+                "iphone 15 pro max": {
+                    brand: "Apple",
+                    category: "Phone",
+                    chip: "A17 Pro",
+                    battery: "29 hours",
+                    camera: 9.5,
+                    gaming: 9.3,
+                    speed: 9.3,
+                    display: "6.7-inch Super Retina XDR",
+                    storages: [
+                        { size: "256GB", price: "$999", available: estimateAvailableStorage("256GB") },
+                        { size: "512GB", price: "$1199", available: estimateAvailableStorage("512GB") },
+                        { size: "1TB", price: "$1399", available: estimateAvailableStorage("1TB") }
+                    ]
+                },
+                "iphone 15 pro": {
+                    brand: "Apple",
+                    category: "Phone",
+                    chip: "A17 Pro",
+                    battery: "23 hours",
+                    camera: 9.3,
+                    gaming: 9.2,
+                    speed: 9.2,
+                    display: "6.1-inch Super Retina XDR",
+                    storages: [
+                        { size: "128GB", price: "$899", available: estimateAvailableStorage("128GB") },
+                        { size: "256GB", price: "$999", available: estimateAvailableStorage("256GB") },
+                        { size: "512GB", price: "$1199", available: estimateAvailableStorage("512GB") },
+                        { size: "1TB", price: "$1399", available: estimateAvailableStorage("1TB") }
+                    ]
+                },
+                "iphone 15": {
+                    brand: "Apple",
+                    category: "Phone",
+                    chip: "A16",
+                    battery: "20 hours",
+                    camera: 8.9,
+                    gaming: 8.8,
+                    speed: 8.8,
+                    display: "6.1-inch Super Retina XDR",
+                    storages: [
+                        { size: "128GB", price: "$699", available: estimateAvailableStorage("128GB") },
+                        { size: "256GB", price: "$799", available: estimateAvailableStorage("256GB") },
+                        { size: "512GB", price: "$999", available: estimateAvailableStorage("512GB") }
+                    ]
+                },
+                "samsung galaxy s26 ultra": {
+                    brand: "Samsung",
+                    category: "Phone",
+                    chip: "Latest flagship chipset",
+                    battery: "All-day battery",
+                    camera: 9.8,
+                    gaming: 9.8,
+                    speed: 9.8,
+                    display: "6.9-inch display",
+                    storages: [
+                        { size: "256GB", price: "AED 5,099", available: estimateAvailableStorage("256GB") },
+                        { size: "512GB", price: "AED 5,899", available: estimateAvailableStorage("512GB") },
+                        { size: "1TB", price: "AED 7,099", available: estimateAvailableStorage("1TB") }
+                    ]
+                }
+            },
+
+            mac: {
+                "macbook pro m5": {
+                    brand: "Apple",
+                    category: "Laptop",
+                    chip: "M5",
+                    battery: "Up to 24 hours",
+                    display: "Liquid Retina XDR",
+                    performance: "Great for pro work, coding, editing",
+                    storages: [
+                        { size: "1TB", price: "AED 7,199", available: estimateAvailableStorage("1TB") },
+                        { size: "2TB", price: "Custom upgrade", available: estimateAvailableStorage("2TB") }
+                    ]
+                },
+                "macbook pro m5 pro": {
+                    brand: "Apple",
+                    category: "Laptop",
+                    chip: "M5 Pro",
+                    battery: "Up to 24 hours",
+                    display: "Liquid Retina XDR",
+                    performance: "High-end pro workflows",
+                    storages: [
+                        { size: "1TB", price: "AED 11,499 (16-inch)", available: estimateAvailableStorage("1TB") },
+                        { size: "2TB", price: "AED 9,299 (14-inch base family starts here)", available: estimateAvailableStorage("2TB") },
+                        { size: "4TB", price: "Custom upgrade", available: estimateAvailableStorage("4TB") }
+                    ]
+                },
+                "macbook pro m5 max": {
+                    brand: "Apple",
+                    category: "Laptop",
+                    chip: "M5 Max",
+                    battery: "Up to 24 hours",
+                    display: "Liquid Retina XDR",
+                    performance: "Extreme pro workflows, AI, 3D, 8K editing",
+                    storages: [
+                        { size: "2TB", price: "AED 15,499 (14-inch) / AED 16,999 (16-inch)", available: estimateAvailableStorage("2TB") },
+                        { size: "4TB", price: "Custom upgrade", available: estimateAvailableStorage("4TB") },
+                        { size: "8TB", price: "Custom upgrade", available: estimateAvailableStorage("8TB") }
+                    ]
+                },
+                "macbook pro": {
+                    brand: "Apple",
+                    category: "Laptop",
+                    chip: "M5 / M5 Pro / M5 Max",
+                    battery: "Up to 24 hours",
+                    display: "Liquid Retina XDR",
+                    performance: "Professional laptop lineup",
+                    storages: [
+                        { size: "1TB", price: "From AED 7,199", available: estimateAvailableStorage("1TB") },
+                        { size: "2TB", price: "Higher configurations available", available: estimateAvailableStorage("2TB") }
+                    ]
+                },
+                "macbook air": {
+                    brand: "Apple",
+                    category: "Laptop",
+                    chip: "M4",
+                    battery: "18 hours",
+                    display: "Liquid Retina",
+                    performance: "Thin and light everyday laptop",
+                    storages: [
+                        { size: "256GB", price: "Varies", available: estimateAvailableStorage("256GB") },
+                        { size: "512GB", price: "Varies", available: estimateAvailableStorage("512GB") },
+                        { size: "1TB", price: "Varies", available: estimateAvailableStorage("1TB") }
+                    ]
+                }
+            },
+
+            ipad: {
+                "ipad pro": {
+                    brand: "Apple",
+                    category: "Tablet",
+                    chip: "M4",
+                    display: "Ultra Retina XDR",
+                    storages: [
+                        { size: "256GB", price: "Varies", available: estimateAvailableStorage("256GB") },
+                        { size: "512GB", price: "Varies", available: estimateAvailableStorage("512GB") },
+                        { size: "1TB", price: "Varies", available: estimateAvailableStorage("1TB") },
+                        { size: "2TB", price: "Varies", available: estimateAvailableStorage("2TB") }
+                    ]
+                },
+                "ipad air": {
+                    brand: "Apple",
+                    category: "Tablet",
+                    chip: "M3",
+                    display: "Liquid Retina",
+                    storages: [
+                        { size: "128GB", price: "Varies", available: estimateAvailableStorage("128GB") },
+                        { size: "256GB", price: "Varies", available: estimateAvailableStorage("256GB") },
+                        { size: "512GB", price: "Varies", available: estimateAvailableStorage("512GB") }
+                    ]
+                }
+            },
+
+            watch: {
+                "watch series 11": {
+                    brand: "Apple",
+                    category: "Watch",
+                    features: "Advanced health sensors",
+                    price: "Varies"
+                },
+                "watch series 10": {
+                    brand: "Apple",
+                    category: "Watch",
+                    features: "Heart rate and sleep tracking",
+                    price: "Varies"
+                },
+                "samsung galaxy watch ultra": {
+                    brand: "Samsung",
+                    category: "Watch",
+                    features: "Rugged premium smartwatch, LTE, advanced health and fitness tracking",
+                    battery: "Up to 100 hours power saving",
+                    price: "AED 2,299",
+                    storage: "Built-in internal storage"
+                },
+                "samsung watch ultra": {
+                    brand: "Samsung",
+                    category: "Watch",
+                    features: "Rugged premium smartwatch, LTE, advanced health and fitness tracking",
+                    battery: "Up to 100 hours power saving",
+                    price: "AED 2,299",
+                    storage: "Built-in internal storage"
+                }
+            },
+
+            airpods: {
+                "airpods pro 3": {
+                    brand: "Apple",
+                    category: "Audio",
+                    anc: "2x stronger noise cancellation",
+                    battery: "30 hours"
+                },
+                "airpods 4": {
+                    brand: "Apple",
+                    category: "Audio",
+                    anc: "Active Noise Cancellation",
+                    battery: "24 hours"
+                },
+                "airpods max": {
+                    brand: "Apple",
+                    category: "Audio",
+                    anc: "Industry leading ANC",
+                    battery: "20 hours"
+                },
+                "samsung buds": {
+                    brand: "Samsung",
+                    category: "Audio",
+                    model: "Galaxy Buds4 / Buds4 Pro",
+                    battery: "Varies by model",
+                    anc: "ANC supported",
+                    storages: [],
+                    price: "Galaxy Buds4 Pro from AED 949"
+                },
+                "samsung galaxy buds": {
+                    brand: "Samsung",
+                    category: "Audio",
+                    model: "Galaxy Buds4 / Buds4 Pro",
+                    battery: "Varies by model",
+                    anc: "ANC supported",
+                    storages: [],
+                    price: "Galaxy Buds4 Pro from AED 949"
+                },
+                "galaxy buds4 pro": {
+                    brand: "Samsung",
+                    category: "Audio",
+                    anc: "Advanced ANC",
+                    battery: "Varies by use",
+                    audio: "24-bit / 96 kHz, 2-way speaker, dual amp",
+                    price: "AED 949"
+                },
+                "galaxy buds4": {
+                    brand: "Samsung",
+                    category: "Audio",
+                    anc: "ANC supported",
+                    battery: "Varies by use",
+                    audio: "24-bit / 96 kHz audio",
+                    price: "Current Samsung UAE price may vary"
+                }
+            }
+        };
+
+        if (!this.novaState) {
+            this.novaState = {
+                mode: "normal",
+                step: 0,
+                answers: {}
+            };
+        }
+
+        setTimeout(() => {
+            let response = "I'm Nova, your Apple and Samsung product specialist.";
+
+            if (this.novaState.mode === "recommend") {
+                if (this.novaState.step === 1) {
+                    this.novaState.answers.color = q;
+                    this.novaState.step = 2;
+                    response = "How much storage do you need? (128GB / 256GB / 512GB / 1TB)";
+                } else if (this.novaState.step === 2) {
+                    this.novaState.answers.storage = q;
+                    this.novaState.step = 3;
+                    response = "What is the main purpose of your phone? (gaming / photography / normal use)";
+                } else if (this.novaState.step === 3) {
+                    this.novaState.answers.use = q;
+                    this.novaState.step = 4;
+                    response = "What is your approximate budget?";
+                } else if (this.novaState.step === 4) {
+                    this.novaState.answers.budget = parseInt(q.replace(/\D/g, "")) || 2000;
+                    this.novaState.step = 5;
+                    response = "What is the most important feature? (camera / battery / speed)";
+                } else if (this.novaState.step === 5) {
+                    this.novaState.answers.feature = q;
+
+                    let feature = this.novaState.answers.feature;
+                    if (feature.includes("speed")) feature = "speed";
+
+                    let phones = Object.entries(devices.iphone);
+
+                    let budgetPhones = phones.filter(([name, phone]) => {
+                        const firstStorage = phone.storages?.[0];
+                        if (!firstStorage) return false;
+                        const numericPrice = parseInt(String(firstStorage.price).replace(/[^\d]/g, "")) || 999999;
+                        return numericPrice <= this.novaState.answers.budget;
+                    });
+
+                    if (budgetPhones.length === 0) {
+                        budgetPhones = phones.slice(0, 3);
+                    }
+
+                    let bestPhone = budgetPhones.sort((a, b) => (b[1][feature] || 0) - (a[1][feature] || 0))[0];
+                    let storageChoice = getBestStorageMatch(bestPhone[1].storages, this.novaState.answers.storage);
+
+                    response = `✅ <b>Nova Recommendation</b><br><br>
+                    Based on your answers, the best phone for you is: <b>${bestPhone[0].toUpperCase()}</b><br><br>
+                    <b>Suggested storage:</b> ${storageChoice.size}<br>
+                    <b>Estimated available storage:</b> ${storageChoice.available}<br>
+                    <b>Price:</b> ${storageChoice.price}<br><br>
+                    Why this phone?<br>
+                    • Excellent performance<br>
+                    • Strong camera system<br>
+                    • Good value for your needs<br>
+                    • Best match for your selected feature`;
+
+                    this.novaState.mode = "normal";
+                    this.novaState.step = 0;
+                    this.novaState.answers = {};
+                }
+            } else if (q.match(/hi|hello|hey|good/)) {
+                response = `<b>Welcome to Nova AI</b><br><br>
+                Hello! I'm <b>Nova</b>, your Apple and Samsung product specialist.<br><br>
+                I can assist you with comparisons, prices, storage options, and buying recommendations. Try saying:<br>
+                • "I want to buy a phone"<br>
+                • "Compare iPhone 17 Pro Max vs Samsung Galaxy S26 Ultra"<br>
+                • "Price of MacBook Pro M5 Max"<br>
+                • "Show storage for Samsung S26 Ultra"`;
+            } else if (q.includes("best camera")) {
+                let best = Object.entries(devices.iphone)
+                    .filter(([name, d]) => d.camera)
+                    .sort((a, b) => b[1].camera - a[1].camera)[0];
+
+                response = `📸 <b>Best Phone Camera</b><br><br>The best camera currently in Nova's database is on: <b>${best[0].toUpperCase()}</b>.`;
+            } else if (q.includes("price")) {
+                let found = false;
+
+                Object.values(devices).forEach(category => {
+                    Object.entries(category).forEach(([name, spec]) => {
+                        if (q.includes(name)) {
+                            found = true;
+
+                            if (spec.storages && spec.storages.length) {
+                                response = `<b>${name.toUpperCase()} PRICE & STORAGE</b><br><br>${formatStorageList(spec.storages)}`;
+                            } else if (spec.price) {
+                                response = `<b>${name.toUpperCase()}</b><br><br><b>Price:</b> ${spec.price}`;
+                            }
+                        }
+                    });
+                });
+
+                if (!found) {
+                    response = "Please tell me the exact device name, for example: <b>Samsung Galaxy S26 Ultra</b> or <b>MacBook Pro M5 Max</b>.";
+                }
+            } else if (q.includes("storage") || q.includes("available storage")) {
+                let found = false;
+
+                Object.values(devices).forEach(category => {
+                    Object.entries(category).forEach(([name, spec]) => {
+                        if (q.includes(name)) {
+                            found = true;
+
+                            if (spec.storages && spec.storages.length) {
+                                response = `<b>${name.toUpperCase()} STORAGE OPTIONS</b><br><br>` +
+                                    spec.storages.map(s =>
+                                        `• <b>${s.size}</b><br>Price: ${s.price}<br>Available after setup: ${s.available}`
+                                    ).join("<br><br>");
+                            } else if (spec.storage) {
+                                response = `<b>${name.toUpperCase()}</b><br><br><b>Storage:</b> ${spec.storage}`;
+                            } else {
+                                response = `I don't have storage options listed for <b>${name.toUpperCase()}</b>.`;
+                            }
+                        }
+                    });
+                });
+
+                if (!found) {
+                    response = "Please mention the exact device name, like <b>Samsung Galaxy S26 Ultra</b> or <b>MacBook Pro M5</b>.";
+                }
+            } else if (q.includes("compare") || q.includes("vs")) {
+                let allDevices = {
+                    ...devices.iphone,
+                    ...devices.mac,
+                    ...devices.ipad,
+                    ...devices.watch,
+                    ...devices.airpods
+                };
+
+                const names = Object.keys(allDevices).sort((a, b) => b.length - a.length);
+
+                let firstQuery = "";
+                let secondQuery = "";
+
+                if (q.includes("vs")) {
+                    const parts = q.split("vs");
+                    firstQuery = parts[0].replace("compare", "").trim();
+                    secondQuery = parts[1].trim();
+                } else {
+                    firstQuery = q.replace("compare", "").trim();
+                }
+
+                const findBestDeviceMatch = (text) => names.find(name => text.includes(name));
+
+                const first = findBestDeviceMatch(firstQuery);
+                const second = findBestDeviceMatch(secondQuery);
+
+                if (first && second) {
+                    let a = allDevices[first];
+                    let b = allDevices[second];
+
+                    response = `<b>Nova Comparison: ${first.toUpperCase()} vs ${second.toUpperCase()}</b><br><br>`;
+
+                    const keys = new Set([...Object.keys(a), ...Object.keys(b)]);
+                    keys.forEach(spec => {
+                        if (spec === "storages") {
+                            response += `<b>Storage</b>: ${
+                                a.storages ? a.storages.map(s => s.size).join(", ") : "N/A"
+                            } vs ${
+                                b.storages ? b.storages.map(s => s.size).join(", ") : "N/A"
+                            }<br>`;
+                        } else if (typeof a[spec] !== "object" && typeof b[spec] !== "object") {
+                            response += `<b>${spec}</b>: ${a[spec] || "N/A"} vs ${b[spec] || "N/A"}<br>`;
+                        }
+                    });
+                } else {
+                    response = 'Please specify two devices clearly, for example: <b>compare iPhone 17 Pro Max vs Samsung Galaxy S26 Ultra</b>';
+                }
+            } else if (q.includes("buy") || q.includes("which phone")) {
+                this.novaState.mode = "recommend";
+                this.novaState.step = 1;
+                this.novaState.answers = {};
+                response = "Sure! I can help you choose the perfect phone.<br><br><b>Which color do you prefer?</b>";
+            } else {
+                let found = false;
+
+                Object.values(devices).forEach(category => {
+                    Object.entries(category).forEach(([name, spec]) => {
+                        if (q.includes(name)) {
+                            found = true;
+
+                            response = `<b>${name.toUpperCase()}</b><br><br>`;
+
+                            Object.entries(spec).forEach(([k, v]) => {
+                                if (k === "storages" && Array.isArray(v)) {
+                                    response += `<b>Storage Options</b><br>${v.map(s => `• ${s.size} | ${s.price} | ${s.available}`).join("<br>")}<br><br>`;
+                                } else if (typeof v !== "object") {
+                                    response += `• <b>${k}</b>: ${v}<br>`;
+                                }
+                            });
+                        }
+                    });
+                });
+
+                if (!found) {
+                    response = `I'm not sure about that one.<br><br>
+                    You can ask me things like:<br>
+                    • "Samsung Galaxy S26 Ultra price"<br>
+                    • "MacBook Pro M5 Max storage"<br>
+                    • "Compare Samsung Galaxy S26 Ultra vs iPhone 17 Pro Max"<br>
+                    • "Samsung Watch Ultra price"<br>
+                    • "Galaxy Buds4 Pro info"`;
+                }
+            }
+
+            this.aiMessages.push({ role: "ai", text: response });
+
+            this.$nextTick(() => {
+                const box = document.getElementById("ai-messages");
+                if (box) box.scrollTop = box.scrollHeight;
+            });
+        }, 500);
+    },
+
+    goToIndex() {
+        window.location.href = "index.html";
+    },
+    goBackHome() {
+    this.currentView = 'home';
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+},
+
+    goToProduct(productName) {
+    this.isLoading = true;
+
+    setTimeout(() => {
+        const searchName = String(productName || "").trim().toLowerCase();
+
+        const product =
+            this.allProducts.find(
+                p => p.name && p.name.trim().toLowerCase() === searchName
+            ) ||
+            this.allProducts.find(
+                p => p.name && p.name.trim().toLowerCase().includes(searchName)
+            );
+
+        if (!product) {
+            this.isLoading = false;
+            alert(`Product not found: ${productName}`);
+            return;
+        }
+
+        this.selectedProduct = product;
+
+        this.activeModel =
+            product.models && product.models.length
+                ? product.models[0]
+                : null;
+
+        this.activeConnectivity =
+            this.activeModel &&
+            this.activeModel.connectivityOptions &&
+            this.activeModel.connectivityOptions.length
+                ? this.activeModel.connectivityOptions[0]
+                : null;
+
+        this.activeColor =
+            this.activeModel &&
+            this.activeModel.colors &&
+            this.activeModel.colors.length
+                ? this.activeModel.colors[0]
+                : (product.colors && product.colors.length ? product.colors[0] : null);
+
+        this.activeSize =
+            product.sizes && product.sizes.length
+                ? product.sizes[0]
+                : null;
+
+        this.activeStorage =
+            product.storageOptions && product.storageOptions.length
+                ? product.storageOptions[0]
+                : null;
+
+        this.activeDisplay =
+            product.displayOptions && product.displayOptions.length
+                ? product.displayOptions[0]
+                : null;
+
+        const validChips =
+            product.chips && product.chips.length
+                ? product.chips.filter(chip => {
+                    return !chip.allowedModels ||
+                        (this.activeModel && chip.allowedModels.includes(this.activeModel.name));
+                })
+                : [];
+
+        this.activeChip = validChips.length ? validChips[0] : null;
+
+        this.activeVariant =
+            this.activeChip &&
+            this.activeChip.variants &&
+            this.activeChip.variants.length
+                ? this.activeChip.variants[0]
+                : null;
+
+        this.currentView = 'details';
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+
+        this.isLoading = false;
+    }, 800);
+},
+    changeModel(model) {
+    this.activeModel = model;
+
+    this.activeConnectivity =
+        model.connectivityOptions && model.connectivityOptions.length
+            ? model.connectivityOptions[0]
+            : null;
+
+    this.activeColor =
+        model.colors && model.colors.length
+            ? model.colors[0]
+            : (
+                this.selectedProduct.colors && this.selectedProduct.colors.length
+                    ? this.selectedProduct.colors[0]
+                    : null
+            );
+
+    const validChips =
+        this.selectedProduct &&
+        this.selectedProduct.chips &&
+        this.selectedProduct.chips.length
+            ? this.selectedProduct.chips.filter(chip => {
+                return !chip.allowedModels || chip.allowedModels.includes(model.name);
+            })
+            : [];
+
+    if (!this.activeChip || !validChips.find(c => c.name === this.activeChip.name)) {
+        this.activeChip = validChips.length ? validChips[0] : null;
+
+        this.activeVariant =
+            this.activeChip &&
+            this.activeChip.variants &&
+            this.activeChip.variants.length
+                ? this.activeChip.variants[0]
+                : null;
+    }
+},
+
+    async placeOrder() {
+    this.checkoutErrors = {};
+
+    if (!this.checkoutForm.name.trim()) {
+        this.checkoutErrors.name = "Name is required";
+    }
+
+    if (!this.checkoutForm.email.trim()) {
+        this.checkoutErrors.email = "Email ID is required";
+    }
+
+    if (!this.checkoutForm.contact.trim()) {
+        this.checkoutErrors.contact = "Contact number is required";
+    }
+
+    if (!this.checkoutForm.addressLabel.trim()) {
+        this.checkoutErrors.addressLabel = "Please select Work, Home or Other";
+    }
+
+    if (!this.checkoutForm.address.trim()) {
+        this.checkoutErrors.address = "Address is required";
+    }
+
+    if (!this.checkoutForm.floorRoom.trim()) {
+        this.checkoutErrors.floorRoom = "Floor / Room No is required";
+    }
+
+    if (!this.checkoutForm.landmark.trim()) {
+        this.checkoutErrors.landmark = "Landmark is required";
+    }
+
+    if (!this.checkoutForm.cardName.trim()) {
+        this.checkoutErrors.cardName = "Card name is required";
+    }
+
+    if (!this.checkoutForm.cardNumber.trim()) {
+        this.checkoutErrors.cardNumber = "Card number is required";
+    } else if (this.checkoutForm.cardNumber.replace(/\s/g, '').length !== 16) {
+        this.checkoutErrors.cardNumber = "Card number must be 16 digits";
+    }
+
+    if (!this.checkoutForm.expiryDate.trim()) {
+        this.checkoutErrors.expiryDate = "Expiry date is required";
+    } else if (!/^\d{2}\/\d{2}$/.test(this.checkoutForm.expiryDate)) {
+        this.checkoutErrors.expiryDate = "Expiry date must be MM/YY";
+    }
+
+    if (!this.checkoutForm.cvc.trim()) {
+        this.checkoutErrors.cvc = "CVC is required";
+    } else if (this.checkoutForm.cvc.length !== 3) {
+        this.checkoutErrors.cvc = "CVC must be 3 digits";
+    }
+
+    if (this.pickupFromStore && !this.selectedStore) {
+        alert("Please select a pickup location.");
+        return;
+    }
+
+    if (Object.keys(this.checkoutErrors).length > 0) {
+        return;
+    }
+
+    if (this.cart.length === 0) {
+        alert("Your cart is empty.");
+        return;
+    }
+
+    try {
+        this.isLoading = true;
+
+        const session = localStorage.getItem("nova_session");
+        const currentUser = session ? JSON.parse(session) : null;
+
+        const response = await fetch("http://localhost:3000/api/orders", {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json"
+            },
+            body: JSON.stringify({
+                checkoutForm: this.checkoutForm,
+                cart: this.cart,
+                pickupFromStore: this.pickupFromStore,
+                selectedStore: this.selectedStore,
+                estimatedDeliveryDate: this.estimatedDeliveryDate,
+                userId: currentUser ? currentUser._id : null
+            })
+        });
+
+        const data = await response.json();
+
+        if (!response.ok) {
+            throw new Error(data.message || "Failed to place order");
+        }
+
+        this.receiptData = data.receipt;
+
+        this.showSuccessPopup = true;
+
+        this.cart = [];
+        localStorage.setItem(this.cartStorageKey, JSON.stringify(this.cart));
+
+        this.checkoutForm = {
+            name: '',
+            email: '',
+            contact: '',
+            addressLabel: '',
+            address: '',
+            floorRoom: '',
+            landmark: '',
+            cardName: '',
+            cardNumber: '',
+            expiryDate: '',
+            cvc: ''
+        };
+
+        this.checkoutErrors = {};
+        this.selectedStore = '';
+        this.pickupFromStore = false;
+
+        setTimeout(() => {
+            this.showSuccessPopup = false;
+            this.currentView = 'receipt';
+        }, 1800);
+
+    } catch (error) {
+        alert(error.message);
+    } finally {
+        this.isLoading = false;
+    }
+},
+
+    formatCardNumber() {
+        let value = this.checkoutForm.cardNumber.replace(/\D/g, '').slice(0, 16);
+        value = value.replace(/(\d{4})(?=\d)/g, '$1 ');
+        this.checkoutForm.cardNumber = value;
+    },
+
+    formatExpiryDate() {
+        let v = this.checkoutForm.expiryDate.replace(/\D/g, '').slice(0, 4);
+
+        if (v.length >= 3) {
+            v = v.slice(0, 2) + '/' + v.slice(2);
+        }
+
+        this.checkoutForm.expiryDate = v;
+    },
+
+    formatCVC() {
+        this.checkoutForm.cvc = this.checkoutForm.cvc.replace(/\D/g, '').slice(0, 3);
+    },
+
+    goToCheckout() {
+        this.prevView = this.currentView;
+        this.currentView = 'checkout';
+    },
+
+ removeFromCart(index) {
+    const removedItem = this.cart[index];
+    const product = this.allProducts.find(p => p.name === removedItem.name);
+
+    if (product && product.inventory) {
+        let inventoryItem = null;
+
+        if (removedItem.storage) {
+            inventoryItem = product.inventory.find(item =>
+                item.color === removedItem.color &&
+                item.storage === removedItem.storage
+            );
+        } else if (removedItem.model) {
+            inventoryItem = product.inventory.find(item =>
+                item.color === removedItem.color &&
+                item.model === removedItem.model
+            );
+        } else if (removedItem.color) {
+            inventoryItem = product.inventory.find(item =>
+                item.color === removedItem.color
+            );
+        } else {
+            inventoryItem = product.inventory.find(item => true);
+        }
+
+        if (inventoryItem) {
+            inventoryItem.stock += 1;
+        }
+    }
+
+    this.cart.splice(index, 1);
+
+    localStorage.setItem(this.cartStorageKey, JSON.stringify(this.cart));
+    localStorage.setItem("novaProducts", JSON.stringify(this.allProducts));
+},
+
+ addToCart() {
+    if (!this.selectedProduct) return;
+
+    const hasColor = this.selectedProduct.colors && this.selectedProduct.colors.length;
+    const hasStorage = this.selectedProduct.storageOptions && this.selectedProduct.storageOptions.length;
+    const hasModel = this.selectedProduct.models && this.selectedProduct.models.length;
+
+    if (hasStorage) {
+        if ((hasColor && (!this.activeColor || !this.activeColor.name)) || !this.activeStorage) {
+            this.cartToastMessage = 'Please select color and storage';
+            this.showCartToast = true;
+
+            setTimeout(() => {
+                this.showCartToast = false;
+            }, 2200);
+            return;
+        }
+    } else if (hasModel) {
+        if ((hasColor && (!this.activeColor || !this.activeColor.name)) || !this.activeModel) {
+            this.cartToastMessage = 'Please select color and model';
+            this.showCartToast = true;
+
+            setTimeout(() => {
+                this.showCartToast = false;
+            }, 2200);
+            return;
+        }
+    } else if (hasColor) {
+        if (!this.activeColor || !this.activeColor.name) {
+            this.cartToastMessage = 'Please select color';
+            this.showCartToast = true;
+
+            setTimeout(() => {
+                this.showCartToast = false;
+            }, 2200);
+            return;
+        }
+    }
+
+    let inventoryItem = null;
+
+    if (this.selectedProduct.inventory && this.selectedProduct.inventory.length) {
+        if (hasStorage) {
+            inventoryItem = this.selectedProduct.inventory.find(item =>
+                (!hasColor || item.color === this.activeColor.name) &&
+                item.storage === this.activeStorage.name
+            );
+        } else if (hasModel) {
+            inventoryItem = this.selectedProduct.inventory.find(item =>
+                (!hasColor || item.color === this.activeColor.name) &&
+                item.model === this.activeModel.name
+            );
+        } else if (hasColor) {
+            inventoryItem = this.selectedProduct.inventory.find(item =>
+                item.color === this.activeColor.name
+            );
+        } else {
+            inventoryItem = this.selectedProduct.inventory.find(item => item.stock > 0);
+        }
+    }
+
+    if (this.selectedProduct.inventory && this.selectedProduct.inventory.length) {
+        if (!inventoryItem || inventoryItem.stock <= 0) {
+            this.cartToastMessage = 'This variant is out of stock';
+            this.showCartToast = true;
+
+            setTimeout(() => {
+                this.showCartToast = false;
+            }, 2200);
+            return;
+        }
+    }
+
+    const item = {
+        productId: this.selectedProduct._id,
+        name: this.selectedProduct.name,
+        model: this.activeModel ? this.activeModel.name : null,
+        connectivity: this.activeConnectivity ? this.activeConnectivity.name : null,
+        color: this.activeColor ? this.activeColor.name : null,
+        storage: this.activeStorage ? this.activeStorage.name : null,
+        variant: this.activeVariant ? this.activeVariant.name : null,
+        chip: this.activeChip ? this.activeChip.name : null,
+        size: this.activeSize ? this.activeSize.name : null,
+        display: this.activeDisplay ? this.activeDisplay.name : null,
+        price: Number(String(this.calculatePrice).replace(/,/g, '')),
+        image: this.activeColor ? this.activeColor.image : ''
+    };
+
+    this.cart.push(item);
+
+    // optional frontend-only stock preview
+    // backend will still do the real stock check during checkout
+    if (inventoryItem) {
+        inventoryItem.stock -= 1;
+    }
+
+    localStorage.setItem(this.cartStorageKey, JSON.stringify(this.cart));
+    localStorage.setItem("novaProducts", JSON.stringify(this.allProducts));
+
+    this.cartToastMessage = 'Added to bag successfully';
+    this.showCartToast = true;
+    this.cartAnimate = true;
+
+    setTimeout(() => {
+        this.showCartToast = false;
+        this.cartAnimate = false;
+    }, 2200);
+}
+},
+
+}); 
+</script>
+
+</body>
+</html>
